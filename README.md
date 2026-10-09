@@ -68,6 +68,16 @@ This app is designed for agricultural or field-robot workflows where an operator
    npm run web
    ```
 
+## Publish the web app with GitHub Pages
+
+The `Deploy Expo web app to GitHub Pages` workflow builds and publishes the static web app whenever changes are pushed to `main`. In the GitHub repository:
+
+1. Under **Settings → Pages**, set the build and deployment source to **GitHub Actions**.
+2. Under **Settings → Secrets and variables → Actions → Variables**, add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. These are client-side Supabase values and are embedded in the public web bundle.
+3. Push to `main` or run the workflow manually from **Actions**.
+
+The site will be available at `https://<your-github-username>.github.io/soil-bot-operator-/`.
+
 ## App flow
 
 - Sign in or sign up using Supabase auth
