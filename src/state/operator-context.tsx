@@ -1,6 +1,6 @@
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { getCloneCoordinates, initializeDatabase, saveCloneCoordinate, saveSession, saveTelemetryLog } from '@/services/database';
+import { getCloneCoordinates, getMarkingEvents, getSessions, getTelemetryLogs, initializeDatabase, saveCloneCoordinate, saveMarkingEvent, saveSession, saveTelemetryLog } from '@/services/database';
 import { RosBridgeClient } from '@/services/rosbridge';
 import type { CloneCoordinate, ConnectionState, FieldSession, MarkingEvent, Position, Telemetry } from '@/types/soilbot';
 
@@ -15,6 +15,7 @@ type OperatorContextValue = {
   databaseReady: boolean;
   databaseError: string;
   rosUrl: string;
+  refreshFromDatabase: () => Promise<void>;
   connect: (url?: string) => void;
   disconnect: () => void;
   createSession: (input: Omit<FieldSession, 'sessionId' | 'timestamp'>) => Promise<void>;
@@ -25,6 +26,10 @@ const defaultSession: FieldSession = { sessionId: 'field-demo', fieldName: 'Fiel
 const defaultPosition: Position = { latitude: 38.7223, longitude: -9.1393, gridX: 23.8, gridY: 4 };
 const defaultTelemetry: Telemetry = { batteryLevel: 86, temperature: 28.4, airQuality: 42, o2Level: 20.9, timestamp: new Date().toISOString() };
 const OperatorContext = createContext<OperatorContextValue | null>(null);
+
+function createId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export function OperatorProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState(defaultSession);
@@ -41,14 +46,18 @@ export function OperatorProvider({ children }: PropsWithChildren) {
   const sessionRef = useRef(session);
   const positionRef = useRef(position);
   const telemetryRef = useRef(telemetry);
+  const lastTelemetrySaveAt = useRef(0);
 
   useEffect(() => { sessionRef.current = session; }, [session]);
   useEffect(() => { positionRef.current = position; }, [position]);
   useEffect(() => { telemetryRef.current = telemetry; }, [telemetry]);
 
   const recordMark = useCallback(() => {
-    const mark: MarkingEvent = { ...positionRef.current, id: `mark-${Date.now()}-${Math.random()}`, sessionId: sessionRef.current.sessionId, timestamp: new Date().toISOString() };
+    const mark: MarkingEvent = { ...positionRef.current, id: createId('mark'), sessionId: sessionRef.current.sessionId, timestamp: new Date().toISOString() };
     setMarks((items) => [mark, ...items].slice(0, 500));
+    void saveMarkingEvent(mark).catch((error: unknown) => {
+      setDatabaseError(error instanceof Error ? error.message : 'Unable to save the marking event.');
+    });
   }, []);
 
   const onTelemetry = useCallback((next: Telemetry) => {
@@ -57,26 +66,84 @@ export function OperatorProvider({ children }: PropsWithChildren) {
     setHistory((items) => [...items.slice(-29), next]);
     const p = positionRef.current;
     const s = sessionRef.current;
-    void saveTelemetryLog({ ...next, id: `${Date.now()}-${Math.random()}`, sessionId: s.sessionId, latitude: p.latitude, longitude: p.longitude });
+    const now = Date.now();
+    if (now - lastTelemetrySaveAt.current >= 4000) {
+      lastTelemetrySaveAt.current = now;
+      void saveTelemetryLog({ ...next, id: createId('telemetry'), sessionId: s.sessionId, latitude: p.latitude, longitude: p.longitude, gridX: p.gridX, gridY: p.gridY }).catch((error: unknown) => {
+        setDatabaseError(error instanceof Error ? error.message : 'Unable to save telemetry.');
+      });
+    }
+  }, []);
+
+  const onPosition = useCallback((next: Position) => {
+    positionRef.current = next;
+    setPosition(next);
+  }, []);
+
+  const refreshFromDatabase = useCallback(async () => {
+    await initializeDatabase();
+    const sessions = await getSessions();
+    if (sessions.length === 0) await saveSession(defaultSession);
+    const activeSession = sessions[0] ?? defaultSession;
+    const [savedClones, savedMarks, savedTelemetry] = await Promise.all([
+      getCloneCoordinates(activeSession.sessionId),
+      getMarkingEvents(activeSession.sessionId),
+      getTelemetryLogs(activeSession.sessionId),
+    ]);
+    sessionRef.current = activeSession;
+    setSession(activeSession);
+    setClones(savedClones);
+    setMarks(savedMarks.slice(0, 500));
+    telemetryRef.current = defaultTelemetry;
+    positionRef.current = defaultPosition;
+    setTelemetry(defaultTelemetry);
+    setPosition(defaultPosition);
+    setHistory([defaultTelemetry]);
+    if (savedTelemetry.length > 0) {
+      const latest = savedTelemetry[0];
+      const restoredTelemetry: Telemetry = {
+        batteryLevel: latest.batteryLevel,
+        temperature: latest.temperature,
+        airQuality: latest.airQuality,
+        o2Level: latest.o2Level,
+        timestamp: latest.timestamp,
+      };
+      const restoredPosition: Position = {
+        latitude: latest.latitude,
+        longitude: latest.longitude,
+        gridX: latest.gridX ?? defaultPosition.gridX,
+        gridY: latest.gridY ?? defaultPosition.gridY,
+      };
+      telemetryRef.current = restoredTelemetry;
+      positionRef.current = restoredPosition;
+      setTelemetry(restoredTelemetry);
+      setPosition(restoredPosition);
+      setHistory(savedTelemetry.slice(0, 30).reverse().map((item) => ({
+        batteryLevel: item.batteryLevel,
+        temperature: item.temperature,
+        airQuality: item.airQuality,
+        o2Level: item.o2Level,
+        timestamp: item.timestamp,
+      })));
+    }
+    setDatabaseError('');
+    setDatabaseReady(true);
   }, []);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        await initializeDatabase();
-        await saveSession(defaultSession);
-        setClones(await getCloneCoordinates(defaultSession.sessionId));
-        setDatabaseReady(true);
-      } catch (error) {
-        setDatabaseError(error instanceof Error ? error.message : 'Unable to open the local database.');
-      }
-    })();
-    client.current = new RosBridgeClient({ onState: setConnection, onPosition: setPosition, onTelemetry, onMarking: recordMark });
-    return () => client.current?.disconnect();
-  }, [onTelemetry, recordMark]);
+    let mounted = true;
+    void Promise.resolve().then(refreshFromDatabase).catch((error: unknown) => {
+      if (mounted) setDatabaseError(error instanceof Error ? error.message : 'Unable to open the local database.');
+    });
+    client.current = new RosBridgeClient({ onState: setConnection, onPosition, onTelemetry, onMarking: recordMark });
+    return () => {
+      mounted = false;
+      client.current?.disconnect();
+    };
+  }, [onPosition, onTelemetry, recordMark, refreshFromDatabase]);
 
   useEffect(() => {
-    if (connection === 'connected') return;
+    if (!databaseReady || connection === 'connected') return;
     const timer = setInterval(() => {
       const current = positionRef.current;
       const nextX = (current.gridX + 1.2) % session.pathLength;
@@ -87,7 +154,7 @@ export function OperatorProvider({ children }: PropsWithChildren) {
       onTelemetry({ batteryLevel: Math.max(5, telemetryRef.current.batteryLevel - 0.1), temperature: 28 + Math.random() * 1.2, airQuality: 38 + Math.round(Math.random() * 10), o2Level: 20.7 + Math.random() * 0.3, timestamp: new Date().toISOString() });
     }, 4000);
     return () => clearInterval(timer);
-  }, [connection, onTelemetry, recordMark, session.markingInterval, session.pathLength, session.rows]);
+  }, [connection, databaseReady, onTelemetry, recordMark, session.markingInterval, session.pathLength, session.rows]);
 
   const connect = useCallback((url?: string) => {
     const target = url?.trim() || rosUrl;
@@ -96,7 +163,7 @@ export function OperatorProvider({ children }: PropsWithChildren) {
   }, [rosUrl]);
   const disconnect = useCallback(() => client.current?.disconnect(), []);
   const createSession = useCallback(async (input: Omit<FieldSession, 'sessionId' | 'timestamp'>) => {
-    const next = { ...input, sessionId: `session-${Date.now()}`, timestamp: new Date().toISOString() };
+    const next = { ...input, sessionId: createId('session'), timestamp: new Date().toISOString() };
     await saveSession(next);
     sessionRef.current = next;
     setSession(next);
@@ -108,12 +175,12 @@ export function OperatorProvider({ children }: PropsWithChildren) {
     setPosition(nextPosition);
   }, []);
   const assignClone = useCallback(async (cloneVariety: string) => {
-    const item: CloneCoordinate = { ...positionRef.current, id: `clone-${Date.now()}`, sessionId: sessionRef.current.sessionId, cloneVariety, timestamp: new Date().toISOString() };
+    const item: CloneCoordinate = { ...positionRef.current, id: createId('clone'), sessionId: sessionRef.current.sessionId, cloneVariety, timestamp: new Date().toISOString() };
     await saveCloneCoordinate(item);
     setClones((items) => [item, ...items]);
   }, []);
 
-  const value = useMemo(() => ({ session, position, telemetry, history, clones, marks, connection, databaseReady, databaseError, rosUrl, connect, disconnect, createSession, assignClone }), [session, position, telemetry, history, clones, marks, connection, databaseReady, databaseError, rosUrl, connect, disconnect, createSession, assignClone]);
+  const value = useMemo(() => ({ session, position, telemetry, history, clones, marks, connection, databaseReady, databaseError, rosUrl, refreshFromDatabase, connect, disconnect, createSession, assignClone }), [session, position, telemetry, history, clones, marks, connection, databaseReady, databaseError, rosUrl, refreshFromDatabase, connect, disconnect, createSession, assignClone]);
   return <OperatorContext.Provider value={value}>{children}</OperatorContext.Provider>;
 }
 

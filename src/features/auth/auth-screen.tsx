@@ -10,7 +10,7 @@ type Mode = 'signIn' | 'signUp';
 export function AuthScreen() {
   const { width } = useWindowDimensions();
   const compact = width < 760;
-  const { configured, signIn, signUp, signInWithProvider } = useAuth();
+  const { configured, authError, signIn, signUp, signInWithProvider } = useAuth();
   const [mode, setMode] = useState<Mode>('signIn');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -105,7 +105,8 @@ export function AuthScreen() {
               <TextInput value={confirmPassword} onChangeText={setConfirmPassword} editable={!busy} secureTextEntry autoComplete="new-password" placeholder="Repeat your password" placeholderTextColor={colors.muted} style={styles.input} />
             </View>}
 
-            {message ? <Text style={styles.message}>{message}</Text> : null}
+            {authError ? <Text accessibilityRole="alert" style={styles.message}>{authError}</Text> : null}
+            {message ? <Text accessibilityRole="alert" style={styles.message}>{message}</Text> : null}
             <Pressable disabled={busy || !configured} onPress={() => void submit()} style={({ pressed }) => [styles.primary, (pressed || busy || !configured) && styles.disabled]}>
               {busy ? <ActivityIndicator color={colors.background} /> : <Text style={styles.primaryText}>{isSignUp ? 'Create account' : 'Sign in securely'}</Text>}
             </Pressable>

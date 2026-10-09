@@ -1,4 +1,4 @@
-import { Slot } from 'expo-router';
+import { Slot, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -21,8 +21,10 @@ export default function RootLayout() {
 
 function AuthenticatedApp() {
   const { loading, session } = useAuth();
+  const pathname = usePathname();
   if (loading) return <View style={styles.loading}><ActivityIndicator size="large" color={colors.green} /></View>;
-  if (!session) return <AuthScreen />;
+  if (!session && pathname !== '/auth/callback') return <AuthScreen />;
+  if (pathname === '/auth/callback') return <Slot />;
   return <OperatorProvider><Slot /></OperatorProvider>;
 }
 

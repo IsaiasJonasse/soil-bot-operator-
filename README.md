@@ -74,7 +74,8 @@ The `Deploy Expo web app to GitHub Pages` workflow builds and publishes the stat
 
 1. Under **Settings → Pages**, set the build and deployment source to **GitHub Actions**.
 2. Under **Settings → Secrets and variables → Actions → Variables**, add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. These are client-side Supabase values and are embedded in the public web bundle.
-3. Push to `main` or run the workflow manually from **Actions**.
+3. In Supabase **Authentication → URL Configuration**, add `https://<your-github-username>.github.io/soil-bot-operator-/auth/callback` to the allowed redirect URLs if enabling Google or Apple sign-in. For local web testing, also allow `http://localhost:8082/auth/callback`.
+4. Push to `main` or run the workflow manually from **Actions**.
 
 The site will be available at `https://<your-github-username>.github.io/soil-bot-operator-/`.
 

@@ -13,7 +13,7 @@ export function SetupScreen() {
   const [pathLength, setPathLength] = useState(String(session.pathLength)); const [interval, setIntervalValue] = useState(String(session.markingInterval)); const [url, setUrl] = useState(rosUrl); const [error, setError] = useState('');
   const start = async () => {
     const parsed = { rows: Number(rows), pathLength: Number(pathLength), markingInterval: Number(interval) };
-    if (!fieldName.trim() || Object.values(parsed).some((n) => !Number.isFinite(n) || n <= 0)) { setError('Enter a field name and positive numeric dimensions.'); return; }
+    if (!fieldName.trim() || !Number.isInteger(parsed.rows) || Object.values(parsed).some((n) => !Number.isFinite(n) || n <= 0) || parsed.markingInterval > parsed.pathLength) { setError('Enter a field name, a whole number of rows, and positive dimensions. The marking interval cannot exceed the path length.'); return; }
     try {
       await createSession({ fieldName: fieldName.trim(), ...parsed });
       router.replace('/');
@@ -24,11 +24,11 @@ export function SetupScreen() {
   return <View style={[styles.columns, compact && styles.stack]}>
     <Card style={styles.primary}><SectionTitle aside={<Pill label="Pre-run" tone="amber" />}>Plantation grid</SectionTitle><Text style={styles.intro}>Define the physical lanes before the robot begins mapping. Values are stored locally and remain available without a network.</Text>
       <View style={styles.fields}><Field label="Field or block name" value={fieldName} onChangeText={setFieldName} placeholder="North orchard" /><View style={styles.row}><Field label="Rows / fiadas" value={rows} onChangeText={setRows} keyboardType="number-pad" /><Field label="Path length (metres)" value={pathLength} onChangeText={setPathLength} keyboardType="decimal-pad" /></View><Field label="Paint marking interval (metres)" value={interval} onChangeText={setIntervalValue} keyboardType="decimal-pad" /></View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}<Button label="Create session & open live map" onPress={start} />
+      {error ? <Text style={styles.error}>{error}</Text> : null}<Button label="Create session & open live map" onPress={start} disabled={!databaseReady} />
     </Card>
     <View style={styles.side}>
       <Card><SectionTitle>System readiness</SectionTitle><Status label="Local field database" value={databaseError || (databaseReady ? 'Ready' : 'Starting')} ready={databaseReady} /><Status label="ROS middleware" value={connection === 'connected' ? 'Connected' : connection} ready={connection === 'connected'} /><Status label="Offline operation" value={databaseReady ? 'Available' : 'Waiting for database'} ready={databaseReady} /></Card>
-      <Card><SectionTitle>ROSBridge connection</SectionTitle><Text style={styles.hint}>Use the robot computer LAN address and rosbridge websocket port.</Text><Field label="WebSocket URL" value={url} onChangeText={setUrl} autoCapitalize="none" autoCorrect={false} placeholder="ws://192.168.1.50:9090" /><View style={styles.actions}><View style={styles.action}><Button label={connection === 'connected' ? 'Reconnect' : 'Connect'} onPress={() => connect(url)} /></View><View style={styles.action}><Button label="Disconnect" secondary onPress={disconnect} /></View></View></Card>
+      <Card><SectionTitle>ROSBridge connection</SectionTitle><Text style={styles.hint}>Use the robot computer LAN address and rosbridge websocket port.</Text><Field label="WebSocket URL" value={url} onChangeText={setUrl} autoCapitalize="none" autoCorrect={false} placeholder="ws://192.168.1.50:9090" /><View style={styles.actions}><View style={styles.action}><Button label={connection === 'connected' ? 'Reconnect' : 'Connect'} onPress={() => connect(url)} disabled={!databaseReady} /></View><View style={styles.action}><Button label="Disconnect" secondary onPress={disconnect} disabled={!databaseReady || connection === 'disconnected'} /></View></View></Card>
     </View>
   </View>;
 }

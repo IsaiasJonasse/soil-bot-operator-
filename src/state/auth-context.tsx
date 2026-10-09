@@ -1,4 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
+import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -14,10 +15,12 @@ type SignUpResult = { needsEmailConfirmation: boolean };
 type AuthContextValue = {
   configured: boolean;
   loading: boolean;
+  authError: string;
   session: Session | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<SignUpResult>;
   signInWithProvider: (provider: SocialProvider) => Promise<void>;
+  completeOAuthRedirect: (url: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -52,6 +55,7 @@ async function completeOAuth(url: string) {
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | null>(null);
+  const [authError, setAuthError] = useState('');
   const [loading, setLoading] = useState(authConfigured);
 
   useEffect(() => {
@@ -59,15 +63,22 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!client) return;
 
     let mounted = true;
-    void client.auth.getSession().then(({ data }) => {
+    void client.auth.getSession().then(({ data, error }) => {
+      if (error) throw error;
       if (mounted) {
         setSession(data.session);
+        setLoading(false);
+      }
+    }).catch((error: unknown) => {
+      if (mounted) {
+        setAuthError(error instanceof Error ? error.message : 'Unable to restore the saved sign-in session.');
         setLoading(false);
       }
     });
 
     const { data: listener } = client.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
+      setAuthError('');
       setLoading(false);
     });
     const appState = Platform.OS === 'web' ? null : AppState.addEventListener('change', (state) => {
@@ -97,7 +108,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const signInWithProvider = useCallback(async (provider: SocialProvider) => {
     const client = requireClient();
-    const redirectTo = Linking.createURL('auth/callback');
+    const baseUrl = Constants.expoConfig?.experiments?.baseUrl ?? '';
+    const redirectTo = Platform.OS === 'web'
+      ? Linking.createURL(`${baseUrl}/auth/callback`)
+      : Linking.createURL('auth/callback');
     const { data, error } = await client.auth.signInWithOAuth({
       provider,
       options: { redirectTo, skipBrowserRedirect: Platform.OS !== 'web' },
@@ -116,7 +130,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (error) throw error;
   }, []);
 
-  const value = useMemo(() => ({ configured: authConfigured, loading, session, signIn, signUp, signInWithProvider, signOut }), [loading, session, signIn, signUp, signInWithProvider, signOut]);
+  const completeOAuthRedirect = useCallback((url: string) => completeOAuth(url), []);
+  const value = useMemo(() => ({ configured: authConfigured, loading, authError, session, signIn, signUp, signInWithProvider, completeOAuthRedirect, signOut }), [loading, authError, session, signIn, signUp, signInWithProvider, completeOAuthRedirect, signOut]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
