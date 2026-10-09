@@ -1,56 +1,92 @@
-# Welcome to your Expo app 👋
+# Soil Bot Operator
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A mobile-first Expo app for managing a robotic field operation. The interface supports:
 
-## Get started
+- live map tracking for a field robot
+- field session creation and grid configuration
+- environment telemetry monitoring
+- offline record export/import
+- Supabase-backed operator authentication
 
-1. Install dependencies
+## Project overview
+
+This app is designed for agricultural or field-robot workflows where an operator needs to:
+
+- define the field layout
+- monitor robot position and sensor health
+- tag clone or crop varieties at given coordinates
+- store records locally before sharing them between devices
+- connect to a ROSBridge websocket for live robot input
+
+## Tech stack
+
+- Expo SDK 57 / React Native 0.86
+- Expo Router
+- TypeScript
+- Supabase auth
+- local persistence via SQLite on native and localStorage on web
+- optional ROSBridge websocket data connection
+
+## Local setup
+
+1. Install dependencies:
 
    ```bash
    npm install
    ```
 
-2. Start the app
+2. Configure environment variables:
 
    ```bash
-   npx expo start
+   cp .env.example .env.local
    ```
 
-In the output, you'll find options to open the app in a
+   Then set the Supabase values in `.env.local`:
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+   - `EXPO_PUBLIC_SUPABASE_URL`
+   - `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+3. Validate the environment and app setup:
 
-## Get a fresh project
+   ```bash
+   npm run check
+   ```
 
-When you're ready, run:
+4. Start the app:
+
+   ```bash
+   npm start
+   ```
+
+   This starts Expo on localhost, which gives the web app a secure browser context for Supabase PKCE/WebCrypto. Use `npm run web` to open the web app. For a phone, use `npm run phone`; it uses Expo Tunnel so the phone does not need to reach your computer's LAN IP. Use `npm run phone:lan` only when the phone and computer can connect directly on the same local network.
+
+   or use the platform-specific scripts:
+
+   ```bash
+   npm run android
+   npm run ios
+   npm run web
+   ```
+
+## App flow
+
+- Sign in or sign up using Supabase auth
+- To allow sign-in immediately after signup, disable **Confirm email** for the Email provider in the Supabase Dashboard under **Authentication → Providers → Email**. Supabase still validates email addresses and passwords.
+- Create a field session from the setup screen
+- Open the live map to view robot position and telemetry
+- Use the environment panel for sensor summaries
+- Export and import JSON or CSV records from the records screen
+
+## Notes
+
+- The ROSBridge URL is configured in the Field setup screen and defaults to a local LAN address.
+- If Supabase is not configured, the auth UI still renders but the sign-in flow is disabled until the environment variables are set.
+- The app supports demo telemetry when ROS is unavailable, which helps with UI testing and presentation.
+
+## Validation commands
 
 ```bash
-npm run reset-project
+npm run lint
+npm run typecheck
+npm run check
 ```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.

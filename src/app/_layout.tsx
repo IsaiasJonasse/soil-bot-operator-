@@ -1,18 +1,29 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { Slot } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { AuthScreen } from '@/features/auth/auth-screen';
+import { colors } from '@/constants/soilbot-theme';
+import { AuthProvider, useAuth } from '@/state/auth-context';
+import { OperatorProvider } from '@/state/operator-context';
 
-SplashScreen.preventAutoHideAsync();
-
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <StatusBar style="light" />
+      <AuthProvider>
+        <AuthenticatedApp />
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
+
+function AuthenticatedApp() {
+  const { loading, session } = useAuth();
+  if (loading) return <View style={styles.loading}><ActivityIndicator size="large" color={colors.green} /></View>;
+  if (!session) return <AuthScreen />;
+  return <OperatorProvider><Slot /></OperatorProvider>;
+}
+
+const styles = StyleSheet.create({ loading: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' } });
