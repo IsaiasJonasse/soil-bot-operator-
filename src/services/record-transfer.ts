@@ -18,12 +18,23 @@ export async function pickRecordJson() {
 
   return new Promise<string | null>((resolve, reject) => {
     const input = document.createElement('input');
+    let settled = false;
+    let focusTimer: ReturnType<typeof setTimeout> | undefined;
     input.type = 'file';
     input.accept = '.json,application/json,text/json';
     input.style.display = 'none';
     const finish = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      if (focusTimer) window.clearTimeout(focusTimer);
+      window.removeEventListener('focus', onWindowFocus);
       input.remove();
       resolve(value);
+    };
+    const onWindowFocus = () => {
+      focusTimer = window.setTimeout(() => {
+        if (!input.files?.length) finish(null);
+      }, 300);
     };
 
     const onChange = async () => {
@@ -36,6 +47,8 @@ export async function pickRecordJson() {
       try {
         finish(await file.text());
       } catch (error) {
+        settled = true;
+        window.removeEventListener('focus', onWindowFocus);
         input.remove();
         reject(error);
       }
@@ -47,6 +60,7 @@ export async function pickRecordJson() {
     input.addEventListener('cancel', () => finish(null), { once: true });
 
     document.body.appendChild(input);
+    window.addEventListener('focus', onWindowFocus);
     input.click();
   });
 }

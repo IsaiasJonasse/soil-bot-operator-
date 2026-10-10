@@ -1,6 +1,7 @@
 import { forwardRef, useRef, useState, type ComponentPropsWithRef, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -112,7 +113,7 @@ export function AuthScreen() {
           <View style={[styles.brandPanel, isWide && styles.brandPanelWide]}>
             <View style={styles.brandRow}>
               <View style={styles.logo} accessibilityElementsHidden>
-                <Text style={styles.logoLeaf}>S</Text>
+                <Image source={require('../../../assets/images/soilbot-mark.png')} resizeMode="contain" style={styles.logoImage} />
               </View>
               <View>
                 <Text style={styles.brandName}>SOIL BOT</Text>
@@ -299,8 +300,8 @@ const styles = StyleSheet.create({
   brandPanel: { marginBottom: 42 },
   brandPanelWide: { flex: 1, maxWidth: 480, marginBottom: 0 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  logo: { width: 45, height: 45, borderRadius: 14, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center', shadowColor: colors.green, shadowOpacity: 0.2, shadowRadius: 16, shadowOffset: { width: 0, height: 7 } },
-  logoLeaf: { color: colors.background, fontSize: 24, fontWeight: '900', fontStyle: 'italic' },
+  logo: { width: 45, height: 45, borderRadius: 14, backgroundColor: colors.panelRaised, alignItems: 'center', justifyContent: 'center', shadowColor: colors.green, shadowOpacity: 0.2, shadowRadius: 16, shadowOffset: { width: 0, height: 7 } },
+  logoImage: { width: 41, height: 41 },
   brandName: { color: colors.text, fontSize: 14, fontWeight: '900', letterSpacing: 1.6 },
   brandCaption: { color: colors.green, fontSize: 8, fontWeight: '800', letterSpacing: 1.7, marginTop: 3 },
   heroContent: { marginTop: 72 },

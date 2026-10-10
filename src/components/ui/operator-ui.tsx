@@ -1,14 +1,15 @@
 import type { PropsWithChildren, ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, type TextInputProps, View, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, type TextInputProps, View, type ViewStyle } from 'react-native';
 
 import { colors, radii } from '@/constants/soilbot-theme';
 
 export function Card({ children, style }: PropsWithChildren<{ style?: ViewStyle | ViewStyle[] }>) { return <View style={[styles.card, style]}>{children}</View>; }
 export function SectionTitle({ children, aside }: PropsWithChildren<{ aside?: ReactNode }>) { return <View style={styles.sectionRow}><Text style={styles.sectionTitle}>{children}</Text>{aside}</View>; }
-export function Button({ label, onPress, secondary = false, disabled = false }: { label: string; onPress: () => void; secondary?: boolean; disabled?: boolean }) {
-  return <Pressable disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, secondary && styles.buttonSecondary, (pressed || disabled) && styles.buttonPressed]}><Text style={[styles.buttonText, secondary && styles.buttonTextSecondary]}>{label}</Text></Pressable>;
+export function Button({ label, onPress, secondary = false, disabled = false, loading = false }: { label: string; onPress: () => void; secondary?: boolean; disabled?: boolean; loading?: boolean }) {
+  const unavailable = disabled || loading;
+  return <Pressable accessibilityRole="button" accessibilityState={{ busy: loading, disabled: unavailable }} disabled={unavailable} onPress={onPress} style={({ pressed }) => [styles.button, secondary && styles.buttonSecondary, (pressed || unavailable) && styles.buttonPressed]}>{loading ? <ActivityIndicator color={secondary ? colors.text : colors.background} /> : <Text style={[styles.buttonText, secondary && styles.buttonTextSecondary]}>{label}</Text>}</Pressable>;
 }
-export function Field({ label, ...props }: TextInputProps & { label: string }) { return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput placeholderTextColor={colors.muted} {...props} style={[styles.input, props.style]} /></View>; }
+export function Field({ label, ...props }: TextInputProps & { label: string }) { return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput accessibilityLabel={props.accessibilityLabel ?? label} placeholderTextColor={colors.muted} {...props} style={[styles.input, props.style]} /></View>; }
 export function Pill({ label, tone = 'green' }: { label: string; tone?: 'green' | 'amber' | 'cyan' }) { const color = tone === 'amber' ? colors.amber : tone === 'cyan' ? colors.cyan : colors.green; return <View style={[styles.pill, { borderColor: color }]}><View style={[styles.pillDot, { backgroundColor: color }]} /><Text style={[styles.pillText, { color }]}>{label}</Text></View>; }
 
 const styles = StyleSheet.create({

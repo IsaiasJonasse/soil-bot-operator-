@@ -8,27 +8,55 @@ import { useOperator } from '@/state/operator-context';
 
 export function SetupScreen() {
   const { width } = useWindowDimensions(); const compact = width < 780;
-  const { session, databaseReady, databaseError, connection, rosUrl, connect, disconnect, createSession } = useOperator();
+  const { session, databaseReady, databaseError, connection, rosUrl, connect, disconnect, createSession, refreshFromDatabase } = useOperator();
   const [fieldName, setFieldName] = useState(session.fieldName); const [rows, setRows] = useState(String(session.rows));
-  const [pathLength, setPathLength] = useState(String(session.pathLength)); const [interval, setIntervalValue] = useState(String(session.markingInterval)); const [url, setUrl] = useState(rosUrl); const [error, setError] = useState('');
+  const [pathLength, setPathLength] = useState(String(session.pathLength)); const [interval, setIntervalValue] = useState(String(session.markingInterval)); const [url, setUrl] = useState(rosUrl); const [error, setError] = useState(''); const [connectionMessage, setConnectionMessage] = useState(''); const [saving, setSaving] = useState(false); const [retrying, setRetrying] = useState(false);
   const start = async () => {
     const parsed = { rows: Number(rows), pathLength: Number(pathLength), markingInterval: Number(interval) };
     if (!fieldName.trim() || !Number.isInteger(parsed.rows) || Object.values(parsed).some((n) => !Number.isFinite(n) || n <= 0) || parsed.markingInterval > parsed.pathLength) { setError('Enter a field name, a whole number of rows, and positive dimensions. The marking interval cannot exceed the path length.'); return; }
+    if (parsed.rows > 200 || parsed.pathLength > 10000) { setError('Use no more than 200 rows and a path length of 10,000 metres.'); return; }
+    setSaving(true);
+    setError('');
     try {
       await createSession({ fieldName: fieldName.trim(), ...parsed });
       router.replace('/');
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Unable to create the field session.');
+    } finally {
+      setSaving(false);
+    }
+  };
+  const connectToRobot = () => {
+    const target = url.trim();
+    try {
+      const parsed = new URL(target);
+      if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') throw new Error();
+    } catch {
+      setConnectionMessage('Enter a valid WebSocket URL beginning with ws:// or wss://.');
+      return;
+    }
+    setConnectionMessage('');
+    connect(target);
+  };
+  const retryDatabase = async () => {
+    setRetrying(true);
+    setError('');
+    try {
+      await refreshFromDatabase();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Unable to open the local database.');
+    } finally {
+      setRetrying(false);
     }
   };
   return <View style={[styles.columns, compact && styles.stack]}>
     <Card style={styles.primary}><SectionTitle aside={<Pill label="Pre-run" tone="amber" />}>Plantation grid</SectionTitle><Text style={styles.intro}>Define the physical lanes before the robot begins mapping. Values are stored locally and remain available without a network.</Text>
       <View style={styles.fields}><Field label="Field or block name" value={fieldName} onChangeText={setFieldName} placeholder="North orchard" /><View style={styles.row}><Field label="Rows / fiadas" value={rows} onChangeText={setRows} keyboardType="number-pad" /><Field label="Path length (metres)" value={pathLength} onChangeText={setPathLength} keyboardType="decimal-pad" /></View><Field label="Paint marking interval (metres)" value={interval} onChangeText={setIntervalValue} keyboardType="decimal-pad" /></View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}<Button label="Create session & open live map" onPress={start} disabled={!databaseReady} />
+      {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}<Button label="Create session & open live map" onPress={() => void start()} disabled={!databaseReady} loading={saving} />
     </Card>
     <View style={styles.side}>
-      <Card><SectionTitle>System readiness</SectionTitle><Status label="Local field database" value={databaseError || (databaseReady ? 'Ready' : 'Starting')} ready={databaseReady} /><Status label="ROS middleware" value={connection === 'connected' ? 'Connected' : connection} ready={connection === 'connected'} /><Status label="Offline operation" value={databaseReady ? 'Available' : 'Waiting for database'} ready={databaseReady} /></Card>
-      <Card><SectionTitle>ROSBridge connection</SectionTitle><Text style={styles.hint}>Use the robot computer LAN address and rosbridge websocket port.</Text><Field label="WebSocket URL" value={url} onChangeText={setUrl} autoCapitalize="none" autoCorrect={false} placeholder="ws://192.168.1.50:9090" /><View style={styles.actions}><View style={styles.action}><Button label={connection === 'connected' ? 'Reconnect' : 'Connect'} onPress={() => connect(url)} disabled={!databaseReady} /></View><View style={styles.action}><Button label="Disconnect" secondary onPress={disconnect} disabled={!databaseReady || connection === 'disconnected'} /></View></View></Card>
+      <Card><SectionTitle>System readiness</SectionTitle><Status label="Local field database" value={databaseError || (databaseReady ? 'Ready' : 'Starting')} ready={databaseReady} /><Status label="ROS middleware" value={connection === 'connected' ? 'Connected' : connection} ready={connection === 'connected'} /><Status label="Offline operation" value={databaseReady ? 'Available' : 'Waiting for database'} ready={databaseReady} />{databaseError ? <Button label="Retry database" secondary onPress={() => void retryDatabase()} loading={retrying} /> : null}</Card>
+      <Card><SectionTitle>ROSBridge connection</SectionTitle><Text style={styles.hint}>Use the robot computer LAN address and rosbridge websocket port.</Text><Field label="WebSocket URL" value={url} onChangeText={(value) => { setUrl(value); setConnectionMessage(''); }} autoCapitalize="none" autoCorrect={false} keyboardType="url" placeholder="ws://192.168.1.50:9090" />{connectionMessage || connection === 'error' ? <Text accessibilityRole="alert" style={styles.error}>{connectionMessage || 'The robot connection failed. Check the address and network, then try again.'}</Text> : null}<View style={styles.actions}><View style={styles.action}><Button label={connection === 'connected' ? 'Reconnect' : 'Connect'} onPress={connectToRobot} disabled={!databaseReady} loading={connection === 'connecting'} /></View><View style={styles.action}><Button label="Disconnect" secondary onPress={disconnect} disabled={!databaseReady || connection === 'disconnected'} /></View></View></Card>
     </View>
   </View>;
 }

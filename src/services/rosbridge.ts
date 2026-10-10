@@ -63,12 +63,18 @@ export class RosBridgeClient {
       const msg = packet.msg ?? {};
       if (packet.topic === '/soilbot/gps_coordinates') {
         const values = [msg.latitude, msg.longitude, msg.grid_x, msg.grid_y];
-        if (values.every(Number.isFinite)) {
+        if (values.every(Number.isFinite)
+          && msg.latitude >= -90 && msg.latitude <= 90
+          && msg.longitude >= -180 && msg.longitude <= 180
+          && msg.grid_x >= 0 && msg.grid_y >= 1) {
           this.callbacks.onPosition({ latitude: msg.latitude, longitude: msg.longitude, gridX: msg.grid_x, gridY: msg.grid_y });
         }
       } else if (packet.topic === '/soilbot/telemetry') {
         const values = [msg.battery_level, msg.temperature, msg.air_quality, msg.o2_level];
-        if (values.every(Number.isFinite)) {
+        if (values.every(Number.isFinite)
+          && msg.battery_level >= 0 && msg.battery_level <= 100
+          && msg.air_quality >= 0
+          && msg.o2_level >= 0 && msg.o2_level <= 100) {
           this.callbacks.onTelemetry({ batteryLevel: msg.battery_level, temperature: msg.temperature, airQuality: msg.air_quality, o2Level: msg.o2_level, timestamp: new Date().toISOString() });
         }
       } else if (packet.topic === '/soilbot/marking_event') this.callbacks.onMarking();

@@ -50,10 +50,23 @@ export async function exportAllData() {
 }
 export async function importAllData(raw: string) {
   const data = parseRecordsArchive(raw);
-  write(KEYS.sessions, data.field_sessions);
-  write(KEYS.clones, data.clone_coordinates);
-  write(KEYS.telemetry, data.telemetry_logs);
-  write(KEYS.marks, data.marking_events);
+  const storage = getStorage();
+  const replacements = [
+    [KEYS.sessions, JSON.stringify(data.field_sessions)],
+    [KEYS.clones, JSON.stringify(data.clone_coordinates)],
+    [KEYS.telemetry, JSON.stringify(data.telemetry_logs)],
+    [KEYS.marks, JSON.stringify(data.marking_events)],
+  ] as const;
+  const backup = replacements.map(([key]) => [key, storage.getItem(key)] as const);
+  try {
+    replacements.forEach(([key, value]) => storage.setItem(key, value));
+  } catch (error) {
+    backup.forEach(([key, value]) => {
+      if (value === null) storage.removeItem(key);
+      else storage.setItem(key, value);
+    });
+    throw error;
+  }
 }
 export function cloneCoordinatesToCsv(rows: CloneCoordinate[]) {
   const escape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`;

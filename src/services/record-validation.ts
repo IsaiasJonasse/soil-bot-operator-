@@ -37,9 +37,12 @@ export function isFieldSession(value: unknown): value is FieldSession {
   return isText(value.sessionId)
     && isText(value.fieldName)
     && isFiniteNumber(value.rows)
-    && value.rows > 0
+    && Number.isInteger(value.rows)
+    && value.rows > 0 && value.rows <= 200
     && isFiniteNumber(value.pathLength) && value.pathLength > 0
     && isFiniteNumber(value.markingInterval) && value.markingInterval > 0
+    && value.pathLength <= 10000
+    && value.markingInterval <= value.pathLength
     && isTimestamp(value.timestamp);
 }
 

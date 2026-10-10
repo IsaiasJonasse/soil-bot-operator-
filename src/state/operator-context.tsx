@@ -55,9 +55,11 @@ export function OperatorProvider({ children }: PropsWithChildren) {
   const recordMark = useCallback(() => {
     const mark: MarkingEvent = { ...positionRef.current, id: createId('mark'), sessionId: sessionRef.current.sessionId, timestamp: new Date().toISOString() };
     setMarks((items) => [mark, ...items].slice(0, 500));
-    void saveMarkingEvent(mark).catch((error: unknown) => {
-      setDatabaseError(error instanceof Error ? error.message : 'Unable to save the marking event.');
-    });
+    void saveMarkingEvent(mark)
+      .then(() => setDatabaseError(''))
+      .catch((error: unknown) => {
+        setDatabaseError(error instanceof Error ? error.message : 'Unable to save the marking event.');
+      });
   }, []);
 
   const onTelemetry = useCallback((next: Telemetry) => {
@@ -69,15 +71,22 @@ export function OperatorProvider({ children }: PropsWithChildren) {
     const now = Date.now();
     if (now - lastTelemetrySaveAt.current >= 4000) {
       lastTelemetrySaveAt.current = now;
-      void saveTelemetryLog({ ...next, id: createId('telemetry'), sessionId: s.sessionId, latitude: p.latitude, longitude: p.longitude, gridX: p.gridX, gridY: p.gridY }).catch((error: unknown) => {
-        setDatabaseError(error instanceof Error ? error.message : 'Unable to save telemetry.');
-      });
+      void saveTelemetryLog({ ...next, id: createId('telemetry'), sessionId: s.sessionId, latitude: p.latitude, longitude: p.longitude, gridX: p.gridX, gridY: p.gridY })
+        .then(() => setDatabaseError(''))
+        .catch((error: unknown) => {
+          setDatabaseError(error instanceof Error ? error.message : 'Unable to save telemetry.');
+        });
     }
   }, []);
 
   const onPosition = useCallback((next: Position) => {
     positionRef.current = next;
     setPosition(next);
+  }, []);
+
+  const onConnectionState = useCallback((next: ConnectionState) => {
+    setConnection(next);
+    if (next === 'connected') setMarks((items) => items.filter((item) => !item.id.startsWith('demo-mark-')));
   }, []);
 
   const refreshFromDatabase = useCallback(async () => {
@@ -135,12 +144,12 @@ export function OperatorProvider({ children }: PropsWithChildren) {
     void Promise.resolve().then(refreshFromDatabase).catch((error: unknown) => {
       if (mounted) setDatabaseError(error instanceof Error ? error.message : 'Unable to open the local database.');
     });
-    client.current = new RosBridgeClient({ onState: setConnection, onPosition, onTelemetry, onMarking: recordMark });
+    client.current = new RosBridgeClient({ onState: onConnectionState, onPosition, onTelemetry, onMarking: recordMark });
     return () => {
       mounted = false;
       client.current?.disconnect();
     };
-  }, [onPosition, onTelemetry, recordMark, refreshFromDatabase]);
+  }, [onConnectionState, onPosition, onTelemetry, recordMark, refreshFromDatabase]);
 
   useEffect(() => {
     if (!databaseReady || connection === 'connected') return;
@@ -150,11 +159,23 @@ export function OperatorProvider({ children }: PropsWithChildren) {
       const next = { ...current, gridX: nextX, gridY: Math.max(1, Math.ceil((nextX / session.pathLength) * session.rows)) };
       positionRef.current = next;
       setPosition(next);
-      if (Math.floor(current.gridX / session.markingInterval) !== Math.floor(nextX / session.markingInterval)) recordMark();
-      onTelemetry({ batteryLevel: Math.max(5, telemetryRef.current.batteryLevel - 0.1), temperature: 28 + Math.random() * 1.2, airQuality: 38 + Math.round(Math.random() * 10), o2Level: 20.7 + Math.random() * 0.3, timestamp: new Date().toISOString() });
+      if (Math.floor(current.gridX / session.markingInterval) !== Math.floor(nextX / session.markingInterval)) {
+        const demoMark: MarkingEvent = { ...next, id: createId('demo-mark'), sessionId: session.sessionId, timestamp: new Date().toISOString() };
+        setMarks((items) => [demoMark, ...items].slice(0, 500));
+      }
+      const demoTelemetry = {
+        batteryLevel: Math.max(5, telemetryRef.current.batteryLevel - 0.1),
+        temperature: 28 + Math.random() * 1.2,
+        airQuality: 38 + Math.round(Math.random() * 10),
+        o2Level: 20.7 + Math.random() * 0.3,
+        timestamp: new Date().toISOString(),
+      };
+      telemetryRef.current = demoTelemetry;
+      setTelemetry(demoTelemetry);
+      setHistory((items) => [...items.slice(-29), demoTelemetry]);
     }, 4000);
     return () => clearInterval(timer);
-  }, [connection, databaseReady, onTelemetry, recordMark, session.markingInterval, session.pathLength, session.rows]);
+  }, [connection, databaseReady, session.markingInterval, session.pathLength, session.rows, session.sessionId]);
 
   const connect = useCallback((url?: string) => {
     const target = url?.trim() || rosUrl;
@@ -173,11 +194,13 @@ export function OperatorProvider({ children }: PropsWithChildren) {
     const nextPosition = { ...positionRef.current, gridX: 0, gridY: 1 };
     positionRef.current = nextPosition;
     setPosition(nextPosition);
+    setDatabaseError('');
   }, []);
   const assignClone = useCallback(async (cloneVariety: string) => {
     const item: CloneCoordinate = { ...positionRef.current, id: createId('clone'), sessionId: sessionRef.current.sessionId, cloneVariety, timestamp: new Date().toISOString() };
     await saveCloneCoordinate(item);
     setClones((items) => [item, ...items]);
+    setDatabaseError('');
   }, []);
 
   const value = useMemo(() => ({ session, position, telemetry, history, clones, marks, connection, databaseReady, databaseError, rosUrl, refreshFromDatabase, connect, disconnect, createSession, assignClone }), [session, position, telemetry, history, clones, marks, connection, databaseReady, databaseError, rosUrl, refreshFromDatabase, connect, disconnect, createSession, assignClone]);
